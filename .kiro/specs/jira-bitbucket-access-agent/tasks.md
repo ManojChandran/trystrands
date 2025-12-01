@@ -1,0 +1,251 @@
+# Implementation Plan
+
+- [x] 1. Set up project structure and infrastructure foundation
+  - Create directory structure for Lambda functions, shared libraries, and infrastructure code
+  - Initialize AWS CDK project with TypeScript
+  - Set up package.json with dependencies (AWS SDK, fast-check for property testing, Jest for unit testing)
+  - Configure TypeScript compiler options for Lambda compatibility
+  - Create shared types and interfaces for AccessRequest, AuditLogEntry, and API responses
+  - _Requirements: 4.1, 4.2_
+
+- [ ] 2. Implement secrets management and configuration
+  - Create Secrets Manager stack in CDK for Jira and Bitbucket credentials
+  - Implement secrets retrieval utility function that caches credentials during Lambda lifetime
+  - [ ] 2.1 Write property test for secrets retrieval
+    - **Property 20: Credentials from Secrets Manager**
+    - **Validates: Requirements 7.1**
+  - Configure environment variables for secret names and AWS region
+  - _Requirements: 4.3, 7.1_
+
+- [ ] 3. Implement core data models and validation
+  - Create AccessRequest interface with all required fields
+  - Implement validation functions for required fields (username, repository, permission)
+  - Create permission level whitelist validator
+  - [ ] 3.1 Write property test for permission whitelist enforcement
+    - **Property 9: Permission level whitelist enforcement**
+    - **Validates: Requirements 3.5**
+  - [ ] 3.2 Write property test for validation error specificity
+    - **Property 2: Validation error specificity**
+    - **Validates: Requirements 1.2, 1.4**
+  - _Requirements: 1.2, 3.5_
+
+- [ ] 4. Implement Jira API client
+  - Create Jira client class with authentication using API token from Secrets Manager
+  - Implement function to parse Jira webhook payload and extract ticket information
+  - Implement function to update Jira ticket with comments
+  - Implement function to transition Jira ticket status
+  - Configure HTTPS client with TLS verification
+  - [ ] 4.1 Write property test for TLS configuration
+    - **Property 21: TLS for external connections**
+    - **Validates: Requirements 7.4**
+  - [ ] 4.2 Write property test for ticket status transitions
+    - **Property 3: Ticket status transitions are monotonic**
+    - **Validates: Requirements 1.5, 2.5**
+  - _Requirements: 1.1, 1.5, 2.3, 2.5, 7.4_
+
+- [ ] 5. Implement Bitbucket API client
+  - Create Bitbucket client class with authentication using API token from Secrets Manager
+  - Implement function to check if user exists in Bitbucket
+  - Implement function to check if repository exists
+  - Implement function to grant repository access with specific permission level
+  - Configure HTTPS client with TLS verification
+  - [ ] 5.1 Write property test for permission grant precision
+    - **Property 4: Permission grant precision**
+    - **Validates: Requirements 2.2**
+  - [ ] 5.2 Write property test for user existence validation
+    - **Property 7: User existence validation with specific feedback**
+    - **Validates: Requirements 3.1, 3.2**
+  - [ ] 5.3 Write property test for repository existence validation
+    - **Property 8: Repository existence validation with specific feedback**
+    - **Validates: Requirements 3.3, 3.4**
+  - _Requirements: 2.2, 3.1, 3.2, 3.3, 3.4, 7.4_
+
+- [ ] 6. Implement webhook signature validation
+  - Create webhook signature validator using HMAC-SHA256
+  - Implement function to extract and verify signature from request headers
+  - [ ] 6.1 Write property test for webhook signature validation
+    - **Property 23: Webhook signature validation**
+    - **Validates: Requirements 8.2, 8.4**
+  - [ ] 6.2 Write unit tests for valid and invalid signatures
+  - _Requirements: 8.2, 8.4_
+
+- [ ] 7. Implement DynamoDB audit logging
+  - Create DynamoDB table stack in CDK with partition key (requestId) and sort key (timestamp)
+  - Create GSIs for jiraTicketId, targetUser, and repository
+  - Implement function to create audit log entry with all required fields
+  - Implement function to query audit logs by user, repository, and date range
+  - [ ] 7.1 Write property test for audit log completeness
+    - **Property 25: Audit log completeness**
+    - **Validates: Requirements 9.1, 9.3**
+  - [ ] 7.2 Write property test for audit log query correctness
+    - **Property 27: Audit log query correctness**
+    - **Validates: Requirements 9.5**
+  - _Requirements: 9.1, 9.3, 9.5_
+
+- [ ] 8. Implement observability utilities
+  - Create structured logging utility that formats logs as JSON with required fields
+  - Implement log sanitization function to remove credentials from log messages
+  - Create metrics publishing utility for CloudWatch Metrics
+  - Create X-Ray tracing utility with correlation ID propagation
+  - [ ] 8.1 Write property test for structured logging consistency
+    - **Property 12: Structured logging consistency**
+    - **Validates: Requirements 5.1**
+  - [ ] 8.2 Write property test for log sanitization
+    - **Property 22: Log sanitization**
+    - **Validates: Requirements 7.5**
+  - [ ] 8.3 Write property test for metrics emission completeness
+    - **Property 13: Metrics emission completeness**
+    - **Validates: Requirements 5.2, 5.5**
+  - [ ] 8.4 Write property test for error logs contain debugging context
+    - **Property 15: Error logs contain debugging context**
+    - **Validates: Requirements 5.4**
+  - _Requirements: 5.1, 5.2, 5.4, 5.5, 7.5_
+
+- [ ] 9. Implement retry logic with exponential backoff
+  - Create retry utility function with configurable max attempts and backoff multiplier
+  - Implement jitter calculation for retry delays
+  - Implement error classification (retryable vs non-retryable)
+  - [ ] 9.1 Write property test for retry with exponential backoff
+    - **Property 16: Retry with exponential backoff**
+    - **Validates: Requirements 6.1**
+  - [ ] 9.2 Write unit tests for retry logic with different error types
+  - _Requirements: 6.1_
+
+- [ ] 10. Implement Webhook Handler Lambda
+  - Create Lambda function handler for API Gateway webhook events
+  - Implement webhook signature validation using utility from task 6
+  - Implement Jira ticket data extraction from webhook payload
+  - Implement SQS message sending with parsed ticket data
+  - Add structured logging and X-Ray tracing
+  - [ ] 10.1 Write property test for valid webhook processing
+    - **Property 24: Valid webhook processing**
+    - **Validates: Requirements 8.3**
+  - [ ] 10.2 Write unit tests for webhook handler with valid and invalid payloads
+  - _Requirements: 8.2, 8.3, 8.4_
+
+- [ ] 11. Implement Request Processor Lambda
+  - Create Lambda function handler for SQS events
+  - Implement access request parsing from ticket description
+  - Implement field validation using utilities from task 3
+  - Implement security validation (user exists, repository exists) using Bitbucket client
+  - Implement Jira ticket updates for validation failures with specific error messages
+  - Add structured logging, metrics, and X-Ray tracing
+  - [ ] 11.1 Write property test for validation gates provisioning
+    - **Property 11: Validation gates provisioning**
+    - **Validates: Requirements 3.7**
+  - [ ] 11.2 Write property test for security policy violation reporting
+    - **Property 10: Security policy violation reporting**
+    - **Validates: Requirements 3.6**
+  - [ ] 11.3 Write unit tests for request processor with various ticket formats
+  - _Requirements: 1.1, 1.2, 1.4, 3.1, 3.2, 3.3, 3.4, 3.6, 3.7_
+
+- [ ] 12. Implement Access Provisioner Lambda
+  - Create Lambda function handler for validated access requests
+  - Implement Bitbucket access granting using Bitbucket client
+  - Implement Jira ticket updates for success with timestamp and permission details
+  - Implement Jira ticket updates for failures with error details
+  - Implement audit log creation before message acknowledgment
+  - Add retry logic with exponential backoff for API calls
+  - Add structured logging, metrics, and X-Ray tracing
+  - [ ] 12.1 Write property test for success updates contain required information
+    - **Property 5: Success updates contain required information**
+    - **Validates: Requirements 2.3**
+  - [ ] 12.2 Write property test for error propagation completeness
+    - **Property 6: Error propagation completeness**
+    - **Validates: Requirements 2.4**
+  - [ ] 12.3 Write property test for audit-first persistence
+    - **Property 26: Audit-first persistence**
+    - **Validates: Requirements 9.4**
+  - [ ] 12.4 Write unit tests for access provisioner with success and failure scenarios
+  - _Requirements: 2.2, 2.3, 2.4, 2.5, 9.4_
+
+- [ ] 13. Implement SQS integration with dead letter queue
+  - Create SQS queue stack in CDK with main queue and DLQ
+  - Configure visibility timeout, message retention, and max receive count
+  - Implement message acknowledgment logic in Lambda functions
+  - [ ] 13.1 Write property test for message acknowledgment after success
+    - **Property 18: Message acknowledgment after success**
+    - **Validates: Requirements 6.3, 6.4**
+  - [ ] 13.2 Write property test for dead letter queue on max retries
+    - **Property 17: Dead letter queue on max retries**
+    - **Validates: Requirements 6.2**
+  - _Requirements: 6.2, 6.3, 6.4_
+
+- [ ] 14. Implement API Gateway and Lambda integration
+  - Create API Gateway stack in CDK with REST API
+  - Configure webhook endpoint with POST method
+  - Integrate API Gateway with Webhook Handler Lambda
+  - Configure API Gateway request/response mappings
+  - Add AWS WAF for DDoS protection
+  - _Requirements: 4.2, 8.1_
+
+- [ ] 15. Implement IAM roles and policies
+  - Create IAM role for Webhook Handler Lambda with minimal permissions
+  - Create IAM role for Request Processor Lambda with minimal permissions
+  - Create IAM role for Access Provisioner Lambda with minimal permissions
+  - Configure least-privilege policies for each Lambda function
+  - _Requirements: 7.2_
+
+- [ ] 16. Implement CloudWatch monitoring and alarms
+  - Create CloudWatch alarms for Lambda error rates
+  - Create CloudWatch alarms for Lambda duration approaching timeout
+  - Create CloudWatch alarm for DLQ message count
+  - Create CloudWatch alarm for API Gateway 5xx errors
+  - Create CloudWatch alarm for SQS queue age
+  - Create CloudWatch dashboard with key metrics
+  - _Requirements: 5.2, 5.5_
+
+- [ ] 17. Implement end-to-end integration tests
+  - [ ] 17.1 Write property test for request parsing and storage round-trip
+    - **Property 1: Request parsing and storage round-trip**
+    - **Validates: Requirements 1.1, 1.2, 1.3**
+  - [ ] 17.2 Write property test for restart idempotency
+    - **Property 19: Restart idempotency**
+    - **Validates: Requirements 6.5**
+  - [ ] 17.3 Set up LocalStack for local AWS service mocking
+  - [ ] 17.4 Create mock Jira and Bitbucket API servers
+  - [ ] 17.5 Write integration test for complete webhook-to-provisioning flow
+  - [ ] 17.6 Write integration test for validation failure scenarios
+  - [ ] 17.7 Write integration test for DLQ message routing
+  - _Requirements: 1.1, 1.2, 1.3, 6.5_
+
+- [ ] 18. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 19. Implement CI/CD pipeline
+  - Create GitHub Actions or AWS CodePipeline configuration
+  - Configure pipeline stages: source, build, test, package, deploy
+  - Set up deployment to dev environment with automatic trigger
+  - Set up deployment to staging environment after dev success
+  - Configure manual approval gate for production deployment
+  - Add smoke tests after production deployment
+  - _Requirements: 4.4_
+
+- [ ] 20. Implement AWS Bedrock Agent Core integration
+  - Define agent configuration with name, description, and foundation model
+  - Create action groups for Jira operations, Bitbucket operations, and validation
+  - Write OpenAPI schemas for each action group
+  - Implement action group executor Lambda functions
+  - Design agent instruction prompt with rules and responsibilities
+  - Configure agent to use existing Lambda functions as action executors
+  - _Requirements: All requirements (agent orchestration)_
+
+- [ ] 21. Create deployment documentation
+  - Document prerequisites (AWS account, Jira/Bitbucket API tokens)
+  - Document CDK deployment commands for each environment
+  - Document environment variable configuration
+  - Document Secrets Manager setup for API credentials
+  - Document Jira webhook configuration
+  - Document monitoring and alerting setup
+  - _Requirements: 4.1, 4.3_
+
+- [ ] 22. Implement load testing
+  - Create load testing scripts using Artillery or k6
+  - Run sustained load test (100 requests/minute for 10 minutes)
+  - Run burst load test (1000 requests in 1 minute)
+  - Measure Lambda cold start times and processing duration
+  - Verify auto-scaling behavior and no message loss
+  - _Requirements: 10.1, 10.2, 10.3_
+
+- [ ] 23. Final Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
